@@ -36,12 +36,17 @@ Set-ExecutionPolicy-ScopeProcess-ExecutionPolicy Bypass
 ## Controls
 
 - **F8** → Toggle mouse jiggling ON/OFF
+- **Tray icon double-click** → Toggle ON/OFF
+- **Tray icon right-click → Toggle**
+- **Tray icon right-click → Exit**
 - **Ctrl+C** → Stop script
 - **Close terminal window** → Stop script
 
+---
+
 ## Configuration (How to Edit)
 
-Open `mouse-jiggler-f8.ps1` and change:
+Open `mouse-jiggler-f8.ps1` and modify these variables near the top:
 
 ```powershell
 $IntervalSeconds =20
@@ -53,30 +58,70 @@ How often the cursor moves.
 $MovePixels =1
 ```
 
-How far the cursor moves.
+How far the cursor moves (pixels).
+
+Moves right by this amount, then back.
 
 ```powershell
 $HotkeyVk =0x77
 ```
 
-Hotkey (F8).
+Virtual-key code for the hotkey.
 
-F9 = 0x78
+Common values:
 
-F10 = 0x79
+```
+F8  =0x77F9  =0x78F10 =0x79F11 =0x7AF12 =0x7B
+```
+
+```powershell
+$HotkeyLabel ="F8"
+```
+
+Human-readable label shown in logs and tray tooltip.
+
+(Keep in sync with `$HotkeyVk`.)
 
 ```powershell
 $StartEnabled =$true
 ```
 
-Start enabled or disabled.
+Whether the script starts in ON mode.
+
+---
 
 ## How It Works
 
-- Registers a global hotkey using Win32 `RegisterHotKey`
-- Creates a hidden message window for `WM_HOTKEY`
-- Moves cursor slightly then returns it
-- Pumps Windows messages so hotkey stays responsive
+- Registers a global hotkey via Win32 `RegisterHotKey`
+- Creates a hidden message window to receive `WM_HOTKEY`
+- Generates small in-memory tray icons (green/gray)
+- When enabled:
+    - Stores current cursor position
+    - Moves cursor by `MovePixels`
+    - Waits briefly
+    - Restores original position
+- Uses frequent message pumping so hotkey and tray remain responsive
+
+---
+
+## Changelog
+
+### v1.1.0 — Tray Icon Release
+
+- Added system tray icon with ON/OFF visual state
+- Green dot (ON) and gray dot (OFF) icons
+- Double-click tray icon to toggle
+- Right-click menu with Toggle / Exit
+- Hotkey registration confirmation message
+- Human-readable hotkey label in logs and tooltip
+- Improved cleanup (hotkey, tray icon, event subscription, icon handles)
+
+### v1.0.0 — Initial Release
+
+- Global hotkey (F8) toggle
+- Configurable interval and move distance
+- Clean shutdown with hotkey unregistration
+- No external dependencies
 
 ---
 
@@ -84,16 +129,50 @@ Start enabled or disabled.
 
 ### Failed to register hotkey
 
-Another app may already use F8.
+Another application may already be using that key.
 
-Change `$HotkeyVk` to another function key.
+Change:
 
-### Hotkey slow to respond
+```powershell
+$HotkeyVk$HotkeyLabel
+```
 
-Lower `$IntervalSeconds` or reduce 100ms sleep in the loop.
+to another function key (F9, F10, etc.)
+
+---
+
+### Tray icon does not appear
+
+Windows may be hiding inactive tray icons.
+
+Click the **^** arrow in the system tray and drag the icon into the visible area.
+
+---
+
+### Hotkey feels slow
+
+Reduce:
+
+```powershell
+$IntervalSeconds
+```
+
+or (advanced) reduce the 100ms sleep inside the inner loop.
 
 ---
 
 ## Notes
 
-This script is intended for benign use (e.g., keeping a screen awake during a long read or demo).
+This script is intended for benign use such as:
+
+- Preventing screen lock during reading
+- Long demos or presentations
+- Keeping collaboration tools active
+
+Not intended to bypass organizational security policies.
+
+---
+
+## License
+
+Use freely at your own risk.
