@@ -35,7 +35,9 @@ public class HotKeyWindow : NativeWindow
         const int WM_HOTKEY = 0x0312;
         if (m.Msg == WM_HOTKEY)
         {
-            HotKeyPressed?.Invoke(this, EventArgs.Empty);
+            // Avoid C# null-conditional (?.) to support older compilers used by Add-Type on some systems
+            var handler = HotKeyPressed;
+            if (handler != null) handler(this, EventArgs.Empty);
         }
         base.WndProc(ref m);
     }
@@ -57,7 +59,8 @@ $StartEnabled    = $true
 $enabled = $StartEnabled
 $window  = New-Object HotKeyWindow
 
-$null = Register-ObjectEvent -InputObject $window -EventName HotKeyPressed -Action {
+# Capture the subscription so we can reliably unregister it later
+$sub = Register-ObjectEvent -InputObject $window -EventName HotKeyPressed -Action {
     # Toggle state
     $script:enabled = -not $script:enabled
     $state = if ($script:enabled) { "ON" } else { "OFF" }
@@ -70,7 +73,7 @@ Write-Host ("Initial state: {0}. Interval: {1}s. Move: {2}px." -f ($(if($enabled
 # Register global hotkey (no modifiers)
 if (-not [HotKeyNative]::RegisterHotKey($window.Handle, $HotkeyId, 0, $HotkeyVk)) {
     $err = [Runtime.InteropServices.Marshal]::GetLastWin32Error()
-    throw "Failed to register hotkey F8. Win32Error=$err (Is another app already using F8 as a global hotkey?)"
+    throw "Failed to register hotkey (VK 0x{0:X}). Win32Error={1} (Is another app already using this as a global hotkey?)" -f $HotkeyVk, $err
 }
 
 try {
@@ -81,7 +84,7 @@ try {
         if ($enabled) {
             # Jiggle: move 1px and back
             $pos = [System.Windows.Forms.Cursor]::Position
-            [System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point($pos.X + $MovePixels, $pos.Y)
+            [System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point(($pos.X + $MovePixels), $pos.Y)
             Start-Sleep -Milliseconds 60
             [System.Windows.Forms.Cursor]::Position = $pos
 
@@ -100,8 +103,10 @@ try {
 }
 finally {
     # Always clean up hotkey + event subscription
-    [void][HotKeyNative]::UnregisterHotKey($window.Handle, $HotkeyId)
-    Unregister-Event -SourceIdentifier ($window.GetHashCode().ToString()) -ErrorAction SilentlyContinue | Out-Null
-    Get-EventSubscriber | Where-Object { $_.SourceObject -eq $window } | Unregister-Event -ErrorAction SilentlyContinue
+    try { [void][HotKeyNative]::UnregisterHotKey($window.Handle, $HotkeyId) } catch {}
+    try {
+        if ($sub) { Unregister-Event -SubscriptionId $sub.Id -ErrorAction SilentlyContinue }
+    } catch {}
+    try { $window.DestroyHandle() } catch {}
     Write-Host "Stopped. Hotkey unregistered."
 }
